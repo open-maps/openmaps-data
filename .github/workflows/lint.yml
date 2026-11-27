@@ -1,0 +1,18 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          nix shell nixpkgs#actionlint nixpkgs#shellcheck nixpkgs#ruff --command bash -c '
+            actionlint
+            shellcheck -x scripts/*.sh
+            ruff check scripts
+            ruff format --check scripts'

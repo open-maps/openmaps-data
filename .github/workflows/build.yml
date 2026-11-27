@@ -1,0 +1,114 @@
+name: Build offline data
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: Geofabrik ids to build, comma separated, all regions when empty
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      date: ${{ steps.plan.outputs.date }}
+      staging: ${{ steps.plan.outputs.staging }}
+      fetches: ${{ steps.plan.outputs.fetches }}
+      batches: ${{ steps.plan.outputs.batches }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - id: plan
+        run: |
+          nix develop -c python3 scripts/plan.py --out plan --only "${{ inputs.regions }}"
+          nix develop -c scripts/timezones.sh plan
+          date=$(jq -r .date plan/regions.json)
+          staging="staging-$date-${{ github.run_id }}"
+          notes="Map data © OpenStreetMap contributors, ODbL. Map tiles in the OpenMapTiles schema from OpenFreeMap. Routing graphs built with Valhalla."
+          gh release create "$staging" --draft --title "Intermediate files of run ${{ github.run_id }}" --notes "Deleted when the run publishes."
+          for release in $(jq -r '[.regions[].continent] | unique | .[]' plan/regions.json) world; do
+            gh release view "$release-$date" >/dev/null 2>&1 || gh release create "$release-$date" --draft --title "$release $date" --notes "$notes"
+          done
+          tar -I zstd -cf plan.tar.zst plan
+          gh release upload "$staging" plan.tar.zst
+          {
+            echo "date=$date"
+            echo "staging=$staging"
+            echo "fetches=$(jq -c '[.fetches[].id]' plan/regions.json)"
+            echo "batches=$(jq -c '[.batches[].id]' plan/regions.json)"
+          } >>"$GITHUB_OUTPUT"
+
+  fetch:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.fetches) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          gh release download "${{ needs.plan.outputs.staging }}" --pattern plan.tar.zst
+          tar -I zstd -xf plan.tar.zst
+          nix develop -c scripts/fetch.sh plan "${{ matrix.group }}" "${{ needs.plan.outputs.staging }}"
+
+  build:
+    needs: [plan, fetch]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        batch: ${{ fromJSON(needs.plan.outputs.batches) }}
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          gh release download "${{ needs.plan.outputs.staging }}" --pattern plan.tar.zst
+          tar -I zstd -xf plan.tar.zst
+          nix develop -c scripts/build-batch.sh plan "${{ matrix.batch }}" "${{ needs.plan.outputs.staging }}"
+
+  overview:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          gh release download "${{ needs.plan.outputs.staging }}" --pattern plan.tar.zst
+          tar -I zstd -xf plan.tar.zst
+          nix develop -c scripts/overview.sh plan out
+          gh release upload "world-${{ needs.plan.outputs.date }}" out/world.pmtiles out/world.json --clobber
+
+  publish:
+    needs: [plan, build, overview]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.overview.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          gh release download "${{ needs.plan.outputs.staging }}" --pattern plan.tar.zst
+          tar -I zstd -xf plan.tar.zst
+          gh release download "world-${{ needs.plan.outputs.date }}" --pattern world.json --dir overview
+          nix develop -c python3 scripts/publish.py plan overview
