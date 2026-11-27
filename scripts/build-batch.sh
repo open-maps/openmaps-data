@@ -15,7 +15,8 @@ out=$(mktemp -d)
 trap 'rm -rf "$extracts" "$out"' EXIT
 
 jq -r --arg batch "$batch" '.batches[] | select(.id == $batch) | .extracts[]' "$plan/regions.json" | while read -r url; do
-  gh release download "$staging" --pattern "$(extract_name "$url")" --dir "$extracts"
+  # A missing extract fails only the regions that need it, so the rest of the batch still builds.
+  gh release download "$staging" --pattern "$(extract_name "$url")" --dir "$extracts" || echo "::warning::$(extract_name "$url") is missing"
 done
 
 failed=0

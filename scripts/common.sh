@@ -11,6 +11,6 @@ extract_name() {
 }
 
 download() {
-  curl -fsSL --retry 5 --retry-delay 30 -A "$user_agent" -o "$2.part" "$1"
+  curl -4 -fsSL --retry 8 --retry-delay 60 --retry-all-errors -A "$user_agent" -o "$2.part" "$1" &&
   mv "$2.part" "$2"
 }

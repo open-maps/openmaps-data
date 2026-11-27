@@ -74,6 +74,8 @@ jobs:
     timeout-minutes: 300
     strategy:
       fail-fast: false
+      # Geofabrik refuses some connections when every download starts at once.
+      max-parallel: 6
       matrix:
         group: ${{ fromJSON(needs.plan.outputs.fetches) }}
     steps:

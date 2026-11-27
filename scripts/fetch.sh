@@ -25,11 +25,23 @@ routing_filter=(
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-jq -r --arg group "$group" '.fetches[] | select(.id == $group) | .extracts[]' "$plan/regions.json" | while read -r url; do
-  name=$(extract_name "$url")
-  download "$url" "$work/raw.osm.pbf"
-  osmium tags-filter --overwrite -o "$work/$name" "$work/raw.osm.pbf" "${routing_filter[@]}"
-  rm "$work/raw.osm.pbf"
-  gh release upload "$staging" "$work/$name" --clobber
-  rm "$work/$name"
-done
+# Chained, as errexit does not apply inside the if that calls this.
+fetch_one() {
+  local name
+  name=$(extract_name "$1")
+  download "$1" "$work/raw.osm.pbf" &&
+    osmium tags-filter --overwrite -o "$work/$name" "$work/raw.osm.pbf" "${routing_filter[@]}" &&
+    rm "$work/raw.osm.pbf" &&
+    gh release upload "$staging" "$work/$name" --clobber &&
+    rm "$work/$name"
+}
+
+# One failed extract must not keep the others of the group from being fetched.
+failed=0
+while read -r url; do
+  if ! (fetch_one "$url"); then
+    echo "::error::Fetching $url failed"
+    failed=1
+  fi
+done < <(jq -r --arg group "$group" '.fetches[] | select(.id == $group) | .extracts[]' "$plan/regions.json")
+exit "$failed"
