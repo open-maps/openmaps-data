@@ -117,7 +117,12 @@ def main():
             referenced.update(tag_of(region[kind]["url"]) for kind in ("map", "routing"))
     for tag in json.loads(gh("release", "list", "--limit", "1000", "--json", "tagName", "--jq", "[.[].tagName]")):
         if tag not in referenced:
-            gh("release", "delete", tag, "--yes", "--cleanup-tag")
+            gh("release", "delete", tag, "--yes")
+            # Drafts never got a tag, so a missing one is fine.
+            subprocess.run(
+                ["gh", "api", "-X", "DELETE", f"repos/{os.environ['GITHUB_REPOSITORY']}/git/refs/tags/{tag}"],
+                check=False,
+            )
 
 
 if __name__ == "__main__":
