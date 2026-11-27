@@ -10,7 +10,8 @@ extract_name() {
   echo "${path//\//_}.routing.osm.pbf"
 }
 
+# Geofabrik refuses connections for a while after heavy use, so retries back off from 1 s to 10 min for up to 30 min.
 download() {
-  curl -4 -fsSL --retry 8 --retry-delay 60 --retry-all-errors -A "$user_agent" -o "$2.part" "$1" &&
+  curl -4 -fsSL --retry 20 --retry-max-time 1800 --retry-all-errors -A "$user_agent" -o "$2.part" "$1" &&
   mv "$2.part" "$2"
 }

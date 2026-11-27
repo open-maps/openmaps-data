@@ -37,11 +37,17 @@ fetch_one() {
 }
 
 # One failed extract must not keep the others of the group from being fetched.
+# Failed ones get a second try at the end, once a block on this runner has likely expired.
+mapfile -t urls < <(jq -r --arg group "$group" '.fetches[] | select(.id == $group) | .extracts[]' "$plan/regions.json")
+retry=()
+for url in "${urls[@]}"; do
+  (fetch_one "$url") || retry+=("$url")
+done
 failed=0
-while read -r url; do
+for url in "${retry[@]}"; do
   if ! (fetch_one "$url"); then
     echo "::error::Fetching $url failed"
     failed=1
   fi
-done < <(jq -r --arg group "$group" '.fetches[] | select(.id == $group) | .extracts[]' "$plan/regions.json")
+done
 exit "$failed"
