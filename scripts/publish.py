@@ -115,7 +115,11 @@ def main():
     for regions in by_continent.values():
         for region in regions.values():
             referenced.update(tag_of(region[kind]["url"]) for kind in ("map", "routing"))
-    for tag in json.loads(gh("release", "list", "--limit", "1000", "--json", "tagName", "--jq", "[.[].tagName]")):
+    listed = json.loads(gh("release", "list", "--limit", "1000", "--json", "tagName,isDraft"))
+    # open-road-incidents fetches the newest published graph, so it stays until a newer one is out.
+    published_ori = sorted(r["tagName"] for r in listed if r["tagName"].startswith("ori-") and not r["isDraft"])
+    referenced.update({f"ori-{date}", *published_ori[-1:]})
+    for tag in (release["tagName"] for release in listed):
         if tag not in referenced:
             gh("release", "delete", tag, "--yes")
             # Drafts never got a tag, so a missing one is fine.

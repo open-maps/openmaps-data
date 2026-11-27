@@ -36,6 +36,8 @@ BATCH_REGIONS = 25
 BAND_DEGREES = 5
 SIZE_REQUESTS = 8
 FETCH_BYTES = 4_000_000_000
+# The countries open-road-incidents collects closures for. Its server routes cars across all of them in one graph.
+ORI_COUNTRIES = {"belgium", "finland", "france", "germany", "luxembourg", "netherlands", "spain"}
 KM_PER_DEGREE = 111.32
 
 
@@ -166,10 +168,19 @@ def fetch_groups(sizes):
     return [{"id": f"{number:03d}", "extracts": group} for number, group in enumerate(groups)]
 
 
+def in_countries(region, regions, countries):
+    while region:
+        if region in countries:
+            return True
+        region = regions[region]["parent"]
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=Path("plan"))
     parser.add_argument("--only", default="", help="comma separated Geofabrik ids to build, all when empty")
+    parser.add_argument("--ori", action="store_true", help="also build the car graph of open-road-incidents")
     args = parser.parse_args()
     only = {region for region in args.only.split(",") if region}
 
@@ -222,7 +233,10 @@ def main():
             }
         )
 
-    sizes = sizes_of(sorted({url for entry in entries for url in entry["extracts"]}))
+    ori = sorted(
+        regions[region]["pbf"] for region in world if args.ori and in_countries(region, regions, ORI_COUNTRIES)
+    )
+    sizes = sizes_of(sorted({url for entry in entries for url in entry["extracts"]} | set(ori)))
     batches = batched(entries, regions, sizes)
     fetches = fetch_groups(sizes)
 
@@ -233,6 +247,7 @@ def main():
         "regions": entries,
         "batches": batches,
         "fetches": fetches,
+        "ori": ori,
     }
     (args.out / "regions.json").write_text(json.dumps(plan))
     print(f"{len(entries)} regions in {len(batches)} batches, map version {map_version}")

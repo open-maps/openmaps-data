@@ -9,6 +9,10 @@ on:
         description: Geofabrik ids to build, comma separated, all regions when empty
         required: false
         default: ""
+      ori:
+        description: Also build the car graph of open-road-incidents
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -29,6 +33,7 @@ jobs:
       staging: ${{ steps.plan.outputs.staging }}
       fetches: ${{ steps.plan.outputs.fetches }}
       batches: ${{ steps.plan.outputs.batches }}
+      ori: ${{ steps.plan.outputs.ori }}
     steps:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
@@ -39,12 +44,17 @@ jobs:
           done
       - id: plan
         run: |
-          nix develop -c python3 scripts/plan.py --out plan --only "${{ inputs.regions }}"
+          options=()
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ inputs.ori }}" = true ]; then options+=(--ori); fi
+          nix develop -c python3 scripts/plan.py --out plan --only "${{ inputs.regions }}" "${options[@]}"
           nix develop -c scripts/timezones.sh plan
           date=$(jq -r .date plan/regions.json)
           staging="staging-$date-${{ github.run_id }}"
           notes="Map data © OpenStreetMap contributors, ODbL. Map tiles in the OpenMapTiles schema from OpenFreeMap. Routing graphs built with Valhalla."
           gh release create "$staging" --draft --title "Intermediate files of run ${{ github.run_id }}" --notes "Deleted when the run publishes."
+          if [ "$(jq '.ori | length' plan/regions.json)" -gt 0 ]; then
+            gh release view "ori-$date" >/dev/null 2>&1 || gh release create "ori-$date" --draft --title "open-road-incidents graph $date" --notes "$notes"
+          fi
           for release in $(jq -r '[.regions[].continent] | unique | .[]' plan/regions.json) world; do
             gh release view "$release-$date" >/dev/null 2>&1 || gh release create "$release-$date" --draft --title "$release $date" --notes "$notes"
           done
@@ -55,6 +65,7 @@ jobs:
             echo "staging=$staging"
             echo "fetches=$(jq -c '[.fetches[].id]' plan/regions.json)"
             echo "batches=$(jq -c '[.batches[].id]' plan/regions.json)"
+            echo "ori=$(jq '.ori | length > 0' plan/regions.json)"
           } >>"$GITHUB_OUTPUT"
 
   fetch:
@@ -92,6 +103,21 @@ jobs:
           tar -I zstd -xf plan.tar.zst
           nix develop -c scripts/build-batch.sh plan "${{ matrix.batch }}" "${{ needs.plan.outputs.staging }}"
 
+  ori:
+    needs: [plan, fetch]
+    if: ${{ !cancelled() && needs.plan.outputs.ori == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          gh release download "${{ needs.plan.outputs.staging }}" --pattern plan.tar.zst
+          tar -I zstd -xf plan.tar.zst
+          nix develop -c scripts/build-ori.sh plan "${{ needs.plan.outputs.staging }}" "ori-${{ needs.plan.outputs.date }}"
+
   overview:
     needs: plan
     runs-on: ubuntu-latest
@@ -106,7 +132,7 @@ jobs:
           gh release upload "world-${{ needs.plan.outputs.date }}" out/world.pmtiles out/world.json --clobber
 
   publish:
-    needs: [plan, build, overview]
+    needs: [plan, build, overview, ori]
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.overview.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
