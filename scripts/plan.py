@@ -36,8 +36,26 @@ BATCH_REGIONS = 25
 BAND_DEGREES = 5
 SIZE_REQUESTS = 8
 FETCH_BYTES = 4_000_000_000
-# The countries open-road-incidents collects closures for. Its server routes cars across all of them in one graph.
-ORI_COUNTRIES = {"belgium", "finland", "france", "germany", "luxembourg", "netherlands", "spain"}
+# The regions of the open-road-incidents server, which routes cars across all of them in one graph. Keep in step with its graph.regions.
+ORI_COUNTRIES = {
+    "austria",
+    "belgium",
+    "british-columbia",
+    "cyprus",
+    "denmark",
+    "finland",
+    "france",
+    "germany",
+    "iceland",
+    "lithuania",
+    "luxembourg",
+    "netherlands",
+    "new-zealand",
+    "quebec",
+    "spain",
+    "switzerland",
+    "wales",
+}
 KM_PER_DEGREE = 111.32
 
 
