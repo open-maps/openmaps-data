@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import re
+import socket
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -36,6 +37,11 @@ BAND_DEGREES = 5
 SIZE_REQUESTS = 8
 FETCH_BYTES = 4_000_000_000
 KM_PER_DEGREE = 111.32
+
+
+# GitHub's runners have no IPv6 route, and urllib does not fall back to IPv4 by itself.
+_getaddrinfo = socket.getaddrinfo
+socket.getaddrinfo = lambda host, port, family=0, *args, **kwargs: _getaddrinfo(host, port, socket.AF_INET, *args, **kwargs)
 
 
 def fetch(url, method="GET"):

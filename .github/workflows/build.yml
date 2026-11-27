@@ -32,6 +32,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
+      - name: Check the data servers
+        run: |
+          for url in https://download.geofabrik.de/index-v1.json https://btrfs.openfreemap.com/files.txt; do
+            curl -4 -sS -o /dev/null -w "%{http_code} %{remote_ip} $url\n" "$url"
+          done
       - id: plan
         run: |
           nix develop -c python3 scripts/plan.py --out plan --only "${{ inputs.regions }}"
