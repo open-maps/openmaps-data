@@ -14,7 +14,9 @@ INDEX = "index.json"
 
 # GitHub's runners have no IPv6 route, and urllib does not fall back to IPv4 by itself.
 _getaddrinfo = socket.getaddrinfo
-socket.getaddrinfo = lambda host, port, family=0, *args, **kwargs: _getaddrinfo(host, port, socket.AF_INET, *args, **kwargs)
+socket.getaddrinfo = lambda host, port, family=0, *args, **kwargs: _getaddrinfo(
+    host, port, socket.AF_INET, *args, **kwargs
+)
 
 
 def gh(*args):
