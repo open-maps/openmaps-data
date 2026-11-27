@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Shared by the build scripts. Sourced, not run.
 
-user_agent="openmaps-data (https://github.com/SeineEloquenz/openmaps-data)"
+user_agent="openmaps-data (https://github.com/open-maps/openmaps-data)"
 
 # The file name of a Geofabrik extract once filtered to what routing needs.
 extract_name() {

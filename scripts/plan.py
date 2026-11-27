@@ -17,7 +17,7 @@ from shapely.ops import unary_union
 INDEX = "https://download.geofabrik.de/index-v1.json"
 PLANET_INDEX = "https://btrfs.openfreemap.com/files.txt"
 PLANET_BASE = "https://btrfs.openfreemap.com/"
-USER_AGENT = "openmaps-data (https://github.com/SeineEloquenz/openmaps-data)"
+USER_AGENT = "openmaps-data (https://github.com/open-maps/openmaps-data)"
 
 # Larger extracts are split into their Geofabrik subregions, keeping each build and file well within runner and release limits.
 MAX_EXTRACT_BYTES = 1_500_000_000
